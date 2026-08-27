@@ -1,0 +1,1740 @@
+    <script>
+    // ===== STORAGE WRAPPER - Compatible with GAS =====
+    const storage = {
+        get: function(key) {
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    return localStorage.getItem(key);
+                }
+                return null;
+            } catch(e) {
+                console.warn('localStorage not available:', e);
+                return null;
+            }
+        },
+        set: function(key, value) {
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem(key, value);
+                }
+            } catch(e) {
+                console.warn('localStorage not available:', e);
+            }
+        },
+        remove: function(key) {
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    localStorage.removeItem(key);
+                }
+            } catch(e) {}
+        }
+    };
+
+    // ===== AUTH SYSTEM =====
+    const AUTH = {
+        // Default passwords — bisa diubah dari Settings
+        getPasswords: function() {
+            const saved = storage.get('authPasswords');
+            if (saved) return JSON.parse(saved);
+            return { admin: 'admin123', user: 'user123' };
+        },
+        savePasswords: function(passwords) {
+            storage.set('authPasswords', JSON.stringify(passwords));
+        },
+
+        // Session
+        login: function(name, password) {
+            const pw = this.getPasswords();
+            if (password === pw.admin) {
+                storage.set('authSession', JSON.stringify({ role: 'admin', name: name.trim() }));
+                return 'admin';
+            }
+            if (password === pw.user) {
+                storage.set('authSession', JSON.stringify({ role: 'user', name: name.trim() }));
+                return 'user';
+            }
+            return null;
+        },
+        logout: function() {
+            storage.remove('authSession');
+        },
+        getSession: function() {
+            const s = storage.get('authSession');
+            return s ? JSON.parse(s) : null;
+        },
+        isAdmin: function() {
+            const s = this.getSession();
+            return s && s.role === 'admin';
+        },
+        getName: function() {
+            const s = this.getSession();
+            return s ? s.name : 'Staf';
+        }
+    };
+
+    // Jalankan cek session sebelum apapun
+    function checkAuth() {
+        const session = AUTH.getSession();
+        if (!session) {
+            showLoginScreen();
+            return false;
+        }
+        return true;
+    }
+
+    function showLoginScreen() {
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('appWrapper').style.display  = 'none';
+    }
+
+    function hideLoginScreen() {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appWrapper').style.display  = 'block';
+    }
+
+    function handleLogin() {
+        const name     = document.getElementById('loginName').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const errEl    = document.getElementById('loginError');
+
+        if (!name) {
+            errEl.textContent = 'Nama tidak boleh kosong';
+            errEl.style.display = 'block';
+            return;
+        }
+        if (!password) {
+            errEl.textContent = 'Password tidak boleh kosong';
+            errEl.style.display = 'block';
+            return;
+        }
+
+        const role = AUTH.login(name, password);
+        if (!role) {
+            errEl.textContent = 'Password salah. Coba lagi.';
+            errEl.style.display = 'block';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginPassword').focus();
+            return;
+        }
+
+        errEl.style.display = 'none';
+        hideLoginScreen();
+        applyRoleUI();
+        initApp();
+        showToast(`Selamat datang, ${AUTH.getName()}! 👋`, 'success');
+    }
+
+    function handleLogout() {
+        showConfirm('Yakin ingin keluar?', function() {
+            AUTH.logout();
+            // Reset form login
+            document.getElementById('loginName').value     = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginError').style.display = 'none';
+            showLoginScreen();
+        });
+    }
+
+    // Terapkan tampilan sesuai role
+    function applyRoleUI() {
+        const isAdmin = AUTH.isAdmin();
+        const session = AUTH.getSession();
+
+        // Update info user di header
+        const userInfo = document.getElementById('headerUserInfo');
+        if (userInfo) {
+            userInfo.innerHTML = `
+                <span class="header-role-badge ${isAdmin ? 'role-admin' : 'role-user'}">
+                    ${isAdmin ? '👑 Admin' : '👤 User'}
+                </span>
+                <span class="header-user-name">${session.name}</span>
+            `;
+        }
+
+        // Sembunyikan tab Admin-only
+        const tabProduk   = document.getElementById('tabProduk');
+        const tabLaporan  = document.getElementById('tabLaporan');
+        if (tabProduk)  tabProduk.style.display  = isAdmin ? '' : 'none';
+        if (tabLaporan) tabLaporan.style.display = isAdmin ? '' : 'none';
+
+        // Sembunyikan tombol hapus servis untuk User
+        // (ditangani di renderServiceList)
+
+        // Sembunyikan tombol Settings jika bukan admin
+        const btnSettings = document.getElementById('btnSettings');
+        if (btnSettings) btnSettings.style.display = isAdmin ? '' : 'none';
+    }
+
+    // ===== SETTINGS (ganti password) =====
+    function openSettings() {
+        if (!AUTH.isAdmin()) return;
+        document.getElementById('settingsAdminPw').value = '';
+        document.getElementById('settingsUserPw').value  = '';
+        document.getElementById('settingsAdminPwConfirm').value = '';
+        document.getElementById('settingsUserPwConfirm').value  = '';
+        document.getElementById('settingsModal').style.display = 'block';
+    }
+
+    function closeSettings() {
+        document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    function saveSettings() {
+        const adminPw        = document.getElementById('settingsAdminPw').value.trim();
+        const adminPwConfirm = document.getElementById('settingsAdminPwConfirm').value.trim();
+        const userPw         = document.getElementById('settingsUserPw').value.trim();
+        const userPwConfirm  = document.getElementById('settingsUserPwConfirm').value.trim();
+
+        const current = AUTH.getPasswords();
+        const updated = { ...current };
+
+        if (adminPw || adminPwConfirm) {
+            if (adminPw.length < 4) {
+                showToast('Password Admin minimal 4 karakter!', 'error'); return;
+            }
+            if (adminPw !== adminPwConfirm) {
+                showToast('Konfirmasi password Admin tidak cocok!', 'error'); return;
+            }
+            updated.admin = adminPw;
+        }
+        if (userPw || userPwConfirm) {
+            if (userPw.length < 4) {
+                showToast('Password User minimal 4 karakter!', 'error'); return;
+            }
+            if (userPw !== userPwConfirm) {
+                showToast('Konfirmasi password User tidak cocok!', 'error'); return;
+            }
+            updated.user = userPw;
+        }
+
+        AUTH.savePasswords(updated);
+        closeSettings();
+        showToast('Password berhasil diperbarui!', 'success');
+    }
+
+    // ===== TOAST NOTIFICATION SYSTEM =====
+    function showToast(message, type = 'success', duration = 3000) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+
+        const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type] || icons.info}</span>
+            <span class="toast-message">${message}</span>
+            <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+        `;
+
+        container.appendChild(toast);
+        // Trigger animation
+        requestAnimationFrame(() => toast.classList.add('show'));
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+
+    // ===== CONFIRM DIALOG (ganti confirm() bawaan) =====
+    function showConfirm(message, onConfirm, onCancel) {
+        const overlay = document.getElementById('confirmOverlay');
+        const msg = document.getElementById('confirmMessage');
+        if (!overlay || !msg) {
+            // Fallback ke confirm bawaan jika elemen belum ada
+            if (window.confirm(message)) onConfirm();
+            else if (onCancel) onCancel();
+            return;
+        }
+        msg.textContent = message;
+        overlay.style.display = 'flex';
+
+        document.getElementById('confirmYes').onclick = function() {
+            overlay.style.display = 'none';
+            onConfirm();
+        };
+        document.getElementById('confirmNo').onclick = function() {
+            overlay.style.display = 'none';
+            if (onCancel) onCancel();
+        };
+    }
+
+    let products = [
+        { id: 1,  name: 'Samsung Galaxy A54',    category: 'smartphone', price: 4500000,  stock: 5,   icon: '📱', image: null, desc: 'Layar 6.4" FHD+, Kamera 50MP, RAM 6GB, Storage 128GB' },
+        { id: 2,  name: 'Xiaomi Redmi Note 12',  category: 'smartphone', price: 2800000,  stock: 8,   icon: '📱', image: null, desc: 'Layar AMOLED 6.67", Kamera 50MP, RAM 4GB, Storage 128GB' },
+        { id: 3,  name: 'iPhone 14',             category: 'smartphone', price: 12000000, stock: 3,   icon: '📱', image: null, desc: 'Layar Super Retina 6.1", Chip A15 Bionic, Kamera 12MP' },
+        { id: 4,  name: 'OPPO A77',              category: 'smartphone', price: 2500000,  stock: 6,   icon: '📱', image: null, desc: 'Layar 6.56" LCD, Baterai 5000mAh, RAM 4GB, Storage 128GB' },
+        { id: 5,  name: 'Vivo Y35',              category: 'smartphone', price: 2300000,  stock: 7,   icon: '📱', image: null, desc: 'Layar 6.58" IPS, Baterai 5000mAh, RAM 8GB, Storage 128GB' },
+        { id: 6,  name: 'Charger Fast Charging', category: 'aksesoris',  price: 150000,   stock: 20,  icon: '🔌', image: null, desc: 'Output 33W, kompatibel semua HP, kabel USB-C included' },
+        { id: 7,  name: 'Kabel Data Type-C',     category: 'aksesoris',  price: 50000,    stock: 30,  icon: '🔗', image: null, desc: 'Panjang 1 meter, material nylon braided, fast charging support' },
+        { id: 8,  name: 'Headset Bluetooth',     category: 'aksesoris',  price: 250000,   stock: 15,  icon: '🎧', image: null, desc: 'True Wireless, battery 6 jam, bass booster, IPX4 waterproof' },
+        { id: 9,  name: 'Tempered Glass',        category: 'aksesoris',  price: 30000,    stock: 50,  icon: '🛡️', image: null, desc: 'Ketebalan 0.3mm, anti gores 9H, full cover, anti fingerprint' },
+        { id: 10, name: 'Casing Anti Crack',     category: 'aksesoris',  price: 45000,    stock: 40,  icon: '📲', image: null, desc: 'Material TPU + PC, anti shock, full camera protection' },
+        { id: 11, name: 'Power Bank 20.000mAh',  category: 'aksesoris',  price: 200000,   stock: 12,  icon: '🔋', image: null, desc: 'Kapasitas 20.000mAh, dual output, fast charge 22.5W' },
+        { id: 12, name: 'Ring Holder',           category: 'aksesoris',  price: 15000,    stock: 35,  icon: '💍', image: null, desc: 'Ring stand 360°, bahan zinc alloy, perekat kuat' },
+        { id: 13, name: 'Car Holder',            category: 'aksesoris',  price: 75000,    stock: 10,  icon: '🚗', image: null, desc: 'Magnetic, dashboard & windshield mount, universal' },
+        { id: 14, name: 'Pulsa 25.000',          category: 'pulsa',      price: 26000,    stock: 999, icon: '📞', image: null, desc: 'Pulsa reguler semua operator, proses instan' },
+        { id: 15, name: 'Pulsa 50.000',          category: 'pulsa',      price: 51000,    stock: 999, icon: '📞', image: null, desc: 'Pulsa reguler semua operator, proses instan' },
+        { id: 16, name: 'Pulsa 100.000',         category: 'pulsa',      price: 101000,   stock: 999, icon: '📞', image: null, desc: 'Pulsa reguler semua operator, proses instan' },
+        { id: 17, name: 'Paket Data 2GB',        category: 'pulsa',      price: 15000,    stock: 999, icon: '📶', image: null, desc: 'Masa aktif 7 hari, semua jaringan 4G/5G' },
+        { id: 18, name: 'Paket Data 5GB',        category: 'pulsa',      price: 30000,    stock: 999, icon: '📶', image: null, desc: 'Masa aktif 14 hari, semua jaringan 4G/5G' },
+        { id: 19, name: 'Paket Data 10GB',       category: 'pulsa',      price: 50000,    stock: 999, icon: '📶', image: null, desc: 'Masa aktif 30 hari, semua jaringan 4G/5G' },
+    ];
+
+    let cart = [];
+    let transactions = [];
+    let services = [];
+    let currentTransaction = null;
+
+    // Initialize data from storage
+    try {
+        const storedTransactions = storage.get('transactions');
+        const storedServices     = storage.get('services');
+        const storedProductImages= storage.get('productImages');
+        transactions = storedTransactions  ? JSON.parse(storedTransactions)  : [];
+        services     = storedServices      ? JSON.parse(storedServices)      : [];
+        // Restore saved product images
+        if (storedProductImages) {
+            const imgs = JSON.parse(storedProductImages);
+            products.forEach(p => { if (imgs[p.id]) p.image = imgs[p.id]; });
+        }
+    } catch(e) {
+        console.warn('Error loading data:', e);
+        transactions = [];
+        services     = [];
+    }
+
+    // ===== THEME MANAGEMENT (MODE GELAP / TERANG) =====
+    function getStoredTheme() {
+        return storage.get('counterhp_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    }
+
+    function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        storage.set('counterhp_theme', theme);
+        updateThemeButtons(theme);
+    }
+
+    function updateThemeButtons(theme) {
+        const isDark = theme === 'dark';
+        const icon = isDark ? '☀️' : '🌙';
+        const title = isDark ? 'Mode Terang' : 'Mode Gelap';
+
+        const btnHeader = document.getElementById('btnThemeToggle');
+        if (btnHeader) {
+            btnHeader.innerHTML = icon;
+            btnHeader.title = title;
+        }
+
+        const btnLogin = document.getElementById('btnLoginThemeToggle');
+        if (btnLogin) {
+            btnLogin.innerHTML = icon;
+            btnLogin.title = title;
+        }
+
+        const btnSettings = document.getElementById('btnSettingsThemeToggle');
+        if (btnSettings) {
+            btnSettings.innerHTML = isDark ? '☀️ Mode Terang' : '🌙 Mode Gelap';
+        }
+    }
+
+    function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
+        const next = current === 'dark' ? 'light' : 'dark';
+        setTheme(next);
+        showToast(next === 'dark' ? 'Mode gelap diaktifkan 🌙' : 'Mode terang diaktifkan ☀️', 'info');
+    }
+
+    function initTheme() {
+        const theme = getStoredTheme();
+        setTheme(theme);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initTheme();
+        // Cek session dulu
+        const session = AUTH.getSession();
+        if (!session) {
+            showLoginScreen();
+            return;
+        }
+        hideLoginScreen();
+        applyRoleUI();
+        initApp();
+    });
+
+    function initApp() {
+        renderProducts();
+        updateHeaderStats();
+        updateDashboard();
+        updateCart();
+        renderServiceList();
+        renderHistory();
+        updateBusinessAlerts();
+        const today = new Date().toISOString().split('T')[0];
+        if (document.getElementById('filterDateTo')) {
+            document.getElementById('filterDateTo').value = today;
+        }
+    }
+
+    // ===== PRODUCT MANAGEMENT (Tambah / Edit / Hapus) =====
+
+    let nextProductId = 20; // mulai dari 20 karena 1-19 sudah ada
+
+    function showTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+
+        const selectedTab = document.getElementById(tabName);
+        if (selectedTab) selectedTab.classList.add('active');
+
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(tabName)) {
+                btn.classList.add('active');
+            }
+        });
+
+        if (tabName === 'riwayat')      renderHistory();
+        else if (tabName === 'laporan') generateReport('today');
+        else if (tabName === 'servis')    renderServiceList();
+        else if (tabName === 'dashboard') updateDashboard();
+        else if (tabName === 'penjualan') renderProducts();
+        else if (tabName === 'produk')    renderProdukTable();
+    }
+
+    function navigateToTab(tabName) {
+        showTab(tabName);
+    }
+
+    // ===== DASHBOARD =====
+    function updateDashboard() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayTrans  = transactions.filter(t => new Date(t.date) >= today);
+        const todayIncome = todayTrans.reduce((sum, t) => sum + t.total, 0);
+        const activeServicesCount = services.filter(s => s.status !== 'Diambil').length;
+
+        document.getElementById('dashTotalProducts').textContent    = products.length;
+        document.getElementById('dashTotalTransactions').textContent = transactions.length;
+        document.getElementById('dashTotalServices').textContent    = services.length;
+    }
+
+    function refreshData() {
+        updateHeaderStats();
+        updateDashboard();
+        updateBusinessAlerts();
+        const activeTab = document.querySelector('.tab-content.active');
+        if (!activeTab) return;
+        const id = activeTab.id;
+        if (id === 'riwayat')      renderHistory();
+        else if (id === 'laporan') generateReport('today');
+        else if (id === 'servis')  renderServiceList();
+        showToast('Data berhasil di-refresh!', 'success');
+    }
+
+    // ===== BUSINESS ALERTS =====
+    function updateBusinessAlerts() {
+        const container = document.getElementById('bizAlerts');
+        if (!container) return;
+
+        const alerts = [];
+
+        // Cek stok menipis (stok <= 3, bukan pulsa)
+        const lowStock = products.filter(p => p.stock <= 3 && p.stock > 0 && p.category !== 'pulsa');
+        const outStock  = products.filter(p => p.stock === 0 && p.category !== 'pulsa');
+
+        if (outStock.length > 0) {
+            alerts.push({
+                type: 'danger',
+                icon: '🚫',
+                text: `${outStock.length} produk stok habis`
+            });
+        }
+        if (lowStock.length > 0) {
+            alerts.push({
+                type: 'warning',
+                icon: '📦',
+                text: `${lowStock.length} produk stok menipis`
+            });
+        }
+
+        // Cek servis belum diambil (status Selesai tapi belum Diambil)
+        const readyServices = services.filter(s => s.status === 'Selesai');
+        if (readyServices.length > 0) {
+            alerts.push({
+                type: 'info',
+                icon: '🔔',
+                text: `${readyServices.length} servis siap diambil`
+            });
+        }
+
+        // Cek servis aktif total
+        const activeServ = services.filter(s => s.status !== 'Diambil');
+        if (activeServ.length > 0) {
+            alerts.push({
+                type: 'neutral',
+                icon: '🔧',
+                text: `${activeServ.length} servis sedang berjalan`
+            });
+        }
+
+        // Pendapatan hari ini — hanya untuk Admin
+        if (AUTH.isAdmin()) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayIncome = transactions
+                .filter(t => new Date(t.date) >= today)
+                .reduce((sum, t) => sum + t.total, 0);
+            if (todayIncome > 0) {
+                alerts.push({ type: 'success', icon: '💰', text: `Omzet hari ini: ${formatCurrency(todayIncome)}` });
+            }
+        }
+
+        // Jika tidak ada alert sama sekali
+        if (alerts.length === 0) {
+            container.innerHTML = `
+                <div class="biz-alert-item biz-alert-neutral">
+                    <span>✅</span>
+                    <span>Semua kondisi normal</span>
+                </div>`;
+            return;
+        }
+
+        // Render max 3 alert agar tidak overflow
+        container.innerHTML = alerts.slice(0, 3).map(a => `
+            <div class="biz-alert-item biz-alert-${a.type}">
+                <span>${a.icon}</span>
+                <span>${a.text}</span>
+            </div>
+        `).join('');
+    }
+
+    // ===== PRODUCTS =====
+    function renderProducts(filter = 'all') {
+        const productList = document.getElementById('productList');
+        let filtered = filter === 'all' ? products : products.filter(p => p.category === filter);
+
+        if (filtered.length === 0) {
+            productList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📦</div>
+                    <div class="empty-state-text">Tidak ada produk</div>
+                </div>`;
+            return;
+        }
+
+        productList.innerHTML = filtered.map(product => {
+            const isOutOfStock = product.stock === 0;
+            const imgHTML = product.image
+                ? `<img class="product-img" src="${product.image}" alt="${product.name}">`
+                : `<div class="product-icon">${product.icon}</div>`;
+            return `
+                <div class="product-card ${isOutOfStock ? 'out-of-stock' : ''}"
+                    onclick="${isOutOfStock ? '' : `addToCart(${product.id})`}">
+                    ${imgHTML}
+                    ${AUTH.isAdmin() ? `
+                    <div class="product-photo-btn" onclick="event.stopPropagation(); openProductModal(${product.id})"
+                        title="Edit produk">✏️</div>` : ''}
+                    <div class="product-name">${product.name}</div>
+                    ${product.desc ? `<div class="product-desc">${product.desc}</div>` : ''}
+                    <div class="product-price">${formatCurrency(product.price)}</div>
+                    <div class="product-stock ${isOutOfStock ? 'stock-empty' : product.stock <= 3 ? 'stock-low' : ''}">
+                        ${isOutOfStock ? '❌ Habis' : `Stok: ${product.stock}`}
+                    </div>
+                    ${product.desc ? `
+                    <button class="btn-show-desc" onclick="event.stopPropagation(); showProductDesc(${product.id})"
+                            title="Lihat spesifikasi">📋 Spesifikasi</button>` : ''}
+                </div>`;
+        }).join('');
+    }
+
+    // ===== MODAL SPESIFIKASI PRODUK =====
+    function showProductDesc(productId) {
+        const product = products.find(p => p.id === productId);
+        if (!product) return;
+
+        const modal = document.getElementById('specModal');
+        const body = document.getElementById('specModalBody');
+        if (!modal || !body) return;
+
+        const isOutOfStock = product.stock === 0;
+        const imgHTML = product.image
+            ? `<img src="${product.image}" alt="${product.name}" class="spec-img">`
+            : `<div class="spec-icon-box">${product.icon || '📱'}</div>`;
+
+        const categoryName = product.category === 'smartphone' ? '📱 Smartphone' :
+                             product.category === 'aksesoris' ? '🔌 Aksesoris' : '📶 Pulsa / Data';
+
+        body.innerHTML = `
+            <div class="spec-header">
+                ${imgHTML}
+                <div class="spec-header-info">
+                    <span class="spec-category-badge">${categoryName}</span>
+                    <h2 class="spec-title">${product.name}</h2>
+                    <div class="spec-price">${formatCurrency(product.price)}</div>
+                    <div class="spec-stock ${isOutOfStock ? 'stock-empty' : product.stock <= 3 ? 'stock-low' : ''}">
+                        ${isOutOfStock ? '❌ Stok Habis' : `📦 Stok Tersedia: ${product.stock}`}
+                    </div>
+                </div>
+            </div>
+            <div class="spec-body">
+                <h3>📋 Deskripsi & Spesifikasi</h3>
+                <div class="spec-text">${product.desc ? product.desc.replace(/\n/g, '<br>') : 'Belum ada deskripsi spesifikasi untuk produk ini.'}</div>
+            </div>
+            <div class="spec-actions">
+                <button class="btn-secondary" onclick="closeSpecModal()">Tutup</button>
+                ${!isOutOfStock ? `<button class="btn-primary" onclick="addToCart(${product.id}); closeSpecModal();">🛒 + Tambah ke Keranjang</button>` : ''}
+            </div>
+        `;
+
+        modal.style.display = 'block';
+    }
+
+    function closeSpecModal() {
+        const modal = document.getElementById('specModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    // ===== PRODUCT PHOTO UPLOAD =====
+    function openPhotoUpload(productId) {
+        const product = products.find(p => p.id === productId);
+        if (!product) return;
+
+        const modal = document.getElementById('photoModal');
+        document.getElementById('photoModalTitle').textContent = product.name;
+
+        // Tampilkan preview jika sudah ada foto
+        const preview = document.getElementById('photoPreview');
+        if (product.image) {
+            preview.innerHTML = `<img src="${product.image}" alt="Foto saat ini" class="photo-preview-img">`;
+            document.getElementById('btnRemovePhoto').style.display = 'flex';
+        } else {
+            preview.innerHTML = `<div class="photo-placeholder">📷<br><span>Belum ada foto</span></div>`;
+            document.getElementById('btnRemovePhoto').style.display = 'none';
+        }
+
+        document.getElementById('photoFileInput').value = '';
+        modal.style.display = 'block';
+        modal.dataset.productId = productId;
+    }
+
+    function handlePhotoSelect(input) {
+        const file = input.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showToast('File harus berupa gambar!', 'error');
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            showToast('Ukuran foto maksimal 2MB!', 'warning');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('photoPreview').innerHTML =
+                `<img src="${e.target.result}" alt="Preview" class="photo-preview-img">`;
+            document.getElementById('btnRemovePhoto').style.display = 'flex';
+            document.getElementById('photoModal').dataset.pendingImage = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function saveProductPhoto() {
+        const modal   = document.getElementById('photoModal');
+        const pid     = parseInt(modal.dataset.productId);
+        const newImg  = modal.dataset.pendingImage;
+        const product = products.find(p => p.id === pid);
+        if (!product) return;
+
+        if (newImg) {
+            product.image = newImg;
+            saveProductImages();
+            showToast(`Foto ${product.name} berhasil disimpan!`, 'success');
+        }
+        closePhotoModal();
+        renderProducts(getCurrentFilter());
+    }
+
+    function removeProductPhoto() {
+        const modal   = document.getElementById('photoModal');
+        const pid     = parseInt(modal.dataset.productId);
+        const product = products.find(p => p.id === pid);
+        if (!product) return;
+        product.image = null;
+        saveProductImages();
+        showToast(`Foto ${product.name} dihapus`, 'info');
+        closePhotoModal();
+        renderProducts(getCurrentFilter());
+    }
+
+    function saveProductImages() {
+        const imgs = {};
+        products.forEach(p => { if (p.image) imgs[p.id] = p.image; });
+        storage.set('productImages', JSON.stringify(imgs));
+    }
+
+    function closePhotoModal() {
+        const modal = document.getElementById('photoModal');
+        modal.style.display = 'none';
+        delete modal.dataset.pendingImage;
+    }
+
+    function getCurrentFilter() {
+        const activeBtn = document.querySelector('.category-btn.active');
+        if (!activeBtn) return 'all';
+        const txt = activeBtn.textContent.trim().toLowerCase();
+        if (txt.includes('smartphone')) return 'smartphone';
+        if (txt.includes('aksesoris'))  return 'aksesoris';
+        if (txt.includes('pulsa'))      return 'pulsa';
+        return 'all';
+    }
+
+    function filterByCategory(category) {
+        document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+        renderProducts(category);
+    }
+
+    function filterProducts() {
+        const searchTerm = document.getElementById('searchProduct').value.toLowerCase();
+        document.querySelectorAll('.product-card').forEach(card => {
+            const name = card.querySelector('.product-name').textContent.toLowerCase();
+            card.style.display = name.includes(searchTerm) ? '' : 'none';
+        });
+    }
+
+    // ===== CART =====
+    function addToCart(productId) {
+        const product = products.find(p => p.id === productId);
+        if (!product || product.stock === 0) {
+            showToast('Produk tidak tersedia atau stok habis!', 'error');
+            return;
+        }
+        const existingItem = cart.find(item => item.id === productId);
+        if (existingItem) {
+            if (existingItem.quantity < product.stock) {
+                existingItem.quantity++;
+            } else {
+                showToast('Stok tidak mencukupi!', 'warning');
+                return;
+            }
+        } else {
+            cart.push({ id: product.id, name: product.name, price: product.price, quantity: 1, icon: product.icon });
+        }
+        updateCart();
+        showToast(`${product.name} ditambahkan ke keranjang`, 'success', 2000);
+    }
+
+    function updateCart() {
+        const cartItems = document.getElementById('cartItems');
+        const totalItems = cart.reduce((sum, i) => sum + i.quantity, 0);
+
+        // Update cart badge
+        const badge = document.getElementById('cartBadge');
+        if (badge) {
+            badge.textContent = totalItems;
+            badge.style.display = totalItems > 0 ? 'flex' : 'none';
+        }
+
+        // Update process payment button state
+        const btnProcess = document.getElementById('btnProsesPembayaran');
+        const btnClear = document.getElementById('btnKosongkan');
+        if (btnProcess) {
+            btnProcess.disabled = cart.length === 0;
+            btnProcess.style.opacity = cart.length === 0 ? '0.5' : '1';
+            btnProcess.style.cursor = cart.length === 0 ? 'not-allowed' : 'pointer';
+        }
+        if (btnClear) {
+            btnClear.disabled = cart.length === 0;
+            btnClear.style.opacity = cart.length === 0 ? '0.5' : '1';
+        }
+
+        if (cart.length === 0) {
+            cartItems.innerHTML = `
+                <div class="empty-state cart-empty">
+                    <div class="empty-state-icon">🛒</div>
+                    <div class="empty-state-text">Keranjang kosong</div>
+                    <div class="empty-state-sub">Klik produk di kiri untuk menambahkan</div>
+                </div>`;
+        } else {
+            cartItems.innerHTML = cart.map(item => `
+                <div class="cart-item">
+                    <div class="cart-item-info">
+                        <div class="cart-item-name">${item.icon} ${item.name}</div>
+                    </div>
+                    <div class="cart-item-details">
+                        <div class="cart-item-price">${formatCurrency(item.price)}</div>
+                        <div class="cart-item-controls">
+                            <button class="qty-btn" onclick="decreaseQty(${item.id})">−</button>
+                            <span class="qty-display">${item.quantity}</span>
+                            <button class="qty-btn" onclick="increaseQty(${item.id})">+</button>
+                            <button class="remove-btn" onclick="removeFromCart(${item.id})" title="Hapus">🗑️</button>
+                        </div>
+                        <div class="cart-item-subtotal">${formatCurrency(item.price * item.quantity)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        calculateTotal();
+    }
+
+    function increaseQty(productId) {
+        const item = cart.find(i => i.id === productId);
+        const product = products.find(p => p.id === productId);
+        if (item && product && item.quantity < product.stock) {
+            item.quantity++;
+            updateCart();
+        } else {
+            showToast('Stok tidak mencukupi!', 'warning');
+        }
+    }
+
+    function decreaseQty(productId) {
+        const item = cart.find(i => i.id === productId);
+        if (item && item.quantity > 1) {
+            item.quantity--;
+            updateCart();
+        }
+    }
+
+    function removeFromCart(productId) {
+        const item = cart.find(i => i.id === productId);
+        cart = cart.filter(i => i.id !== productId);
+        updateCart();
+        if (item) showToast(`${item.name} dihapus dari keranjang`, 'info', 2000);
+    }
+
+    function clearCart() {
+        if (cart.length === 0) return;
+        showConfirm('Kosongkan semua item di keranjang?', function() {
+            cart = [];
+            updateCart();
+            showToast('Keranjang berhasil dikosongkan', 'info');
+        });
+    }
+
+    function calculateTotal() {
+        const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const discount = parseFloat(document.getElementById('discount').value) || 0;
+        const discountAmount = subtotal * (discount / 100);
+        const total = subtotal - discountAmount;
+        document.getElementById('subtotal').textContent = formatCurrency(subtotal);
+        document.getElementById('total').textContent = formatCurrency(total);
+    }
+
+    // ===== PAYMENT =====
+    function openPaymentModal() {
+        if (cart.length === 0) {
+            showToast('Keranjang masih kosong!', 'warning');
+            return;
+        }
+        const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const discount = parseFloat(document.getElementById('discount').value) || 0;
+        const discountAmount = total * (discount / 100);
+        const finalTotal = total - discountAmount;
+
+        currentTransaction = {
+            items: [...cart],
+            subtotal: total,
+            discount: discount,
+            total: finalTotal,
+            customerName: document.getElementById('customerName').value || 'Pembeli',
+            customerPhone: document.getElementById('customerPhone').value || '-'
+        };
+
+        document.getElementById('paymentTotal').textContent = formatCurrency(finalTotal);
+        document.getElementById('paymentReceived').value = '';
+        document.getElementById('changeAmount').textContent = 'Rp 0';
+        document.getElementById('paymentModal').style.display = 'block';
+    }
+
+    function processTransaction() {
+        openPaymentModal();
+    }
+
+    function closePaymentModal() {
+        document.getElementById('paymentModal').style.display = 'none';
+        document.getElementById('paymentReceived').value = '';
+        document.getElementById('changeAmount').textContent = 'Rp 0';
+    }
+
+    function calculateChange() {
+        if (!currentTransaction) return;
+        const total    = currentTransaction.total;
+        const received = parseRupiahInput('paymentReceived');
+        const change   = received - total;
+        document.getElementById('changeAmount').textContent = formatCurrency(change >= 0 ? change : 0);
+
+        const changeDisplay = document.querySelector('.change-display');
+        if (changeDisplay) {
+            changeDisplay.style.background   = change >= 0 ? '#D1FAE5' : '#FEE2E2';
+            changeDisplay.style.borderColor  = change >= 0 ? '#6EE7B7' : '#FCA5A5';
+            const p = changeDisplay.querySelector('p');
+            if (p) p.style.color = change >= 0 ? '#065F46' : '#991B1B';
+        }
+    }
+
+    function confirmPayment() {
+        const received = parseRupiahInput('paymentReceived');
+        if (received < currentTransaction.total) {
+            showToast('Uang diterima kurang dari total tagihan!', 'error');
+            return;
+        }
+
+        // Kurangi stok
+        currentTransaction.items.forEach(item => {
+            const product = products.find(p => p.id === item.id);
+            if (product) product.stock -= item.quantity;
+        });
+
+        const transaction = {
+            id: 'TRX' + Date.now(),
+            type: 'penjualan',
+            date: new Date().toISOString(),
+            items: currentTransaction.items,
+            subtotal: currentTransaction.subtotal,
+            discount: currentTransaction.discount,
+            total: currentTransaction.total,
+            customerName: currentTransaction.customerName,
+            customerPhone: currentTransaction.customerPhone,
+            paymentMethod: document.getElementById('paymentMethod').value,
+            received: received,
+            change: received - currentTransaction.total
+        };
+
+        transactions.push(transaction);
+        storage.set('transactions', JSON.stringify(transactions));
+
+        // Reset cart & form
+        cart = [];
+        updateCart();
+        document.getElementById('customerName').value = '';
+        document.getElementById('customerPhone').value = '';
+        document.getElementById('discount').value = '';
+        closePaymentModal();
+        updateHeaderStats();
+        renderProducts();
+
+        showToast('Transaksi berhasil disimpan!', 'success');
+        updateBusinessAlerts();
+        showReceipt(transaction);
+    }
+
+    function showReceipt(transaction) {
+        const receiptContent = document.getElementById('receiptContent');
+        receiptContent.innerHTML = `
+            <div class="receipt-header">
+                <h2>COUNTER HP</h2>
+                <p>Jl. Contoh No. 123</p>
+                <p>Telp: 0812-3456-7890</p>
+                <p style="margin-top: 10px;">================================</p>
+            </div>
+            <p><strong>No. Transaksi:</strong> ${transaction.id}</p>
+            <p><strong>Tanggal:</strong> ${formatDate(transaction.date)}</p>
+            <p><strong>Operator:</strong> ${AUTH.getName()}</p>
+            <p><strong>Pelanggan:</strong> ${transaction.customerName}</p>
+            ${transaction.customerPhone !== '-' ? `<p><strong>No. HP:</strong> ${transaction.customerPhone}</p>` : ''}
+            <p>================================</p>
+            <div class="receipt-items">
+                ${transaction.items.map(item => `
+                    <div class="receipt-item"><span>${item.name}</span></div>
+                    <div class="receipt-item">
+                        <span>${item.quantity} x ${formatCurrency(item.price)}</span>
+                        <span>${formatCurrency(item.quantity * item.price)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="receipt-footer">
+                <div class="receipt-item">
+                    <span>Subtotal:</span>
+                    <span>${formatCurrency(transaction.subtotal)}</span>
+                </div>
+                ${transaction.discount > 0 ? `
+                    <div class="receipt-item">
+                        <span>Diskon (${transaction.discount}%):</span>
+                        <span>- ${formatCurrency(transaction.subtotal * transaction.discount / 100)}</span>
+                    </div>` : ''}
+                <div class="receipt-item" style="font-size:1.2em;font-weight:bold;">
+                    <span>TOTAL:</span>
+                    <span>${formatCurrency(transaction.total)}</span>
+                </div>
+                <div class="receipt-item">
+                    <span>Bayar (${transaction.paymentMethod}):</span>
+                    <span>${formatCurrency(transaction.received)}</span>
+                </div>
+                <div class="receipt-item">
+                    <span>Kembalian:</span>
+                    <span>${formatCurrency(transaction.change)}</span>
+                </div>
+            </div>
+            <p style="text-align:center;margin-top:15px;">================================</p>
+            <p style="text-align:center;">Terima Kasih</p>
+            <p style="text-align:center;">Barang yang sudah dibeli tidak dapat dikembalikan</p>
+        `;
+        document.getElementById('receiptModal').style.display = 'block';
+    }
+
+    function closeReceiptModal() {
+        document.getElementById('receiptModal').style.display = 'none';
+    }
+
+    function printReceipt() {
+        window.print();
+    }
+
+    // ===== SERVICE =====
+    function addService(event) {
+        event.preventDefault();
+
+        // Validasi: deposit tidak boleh melebihi harga
+        const price   = parseRupiahInput('servicePrice');
+        const deposit = parseRupiahInput('serviceDeposit');
+
+        if (deposit > price) {
+            showToast('DP tidak boleh melebihi estimasi biaya!', 'error');
+            setFieldError('serviceDeposit', true);
+            return;
+        }
+        setFieldError('serviceDeposit', false);
+
+        const service = {
+            id: 'SRV' + Date.now(),
+            date: new Date().toISOString(),
+            customerName: document.getElementById('serviceName').value,
+            customerPhone: document.getElementById('servicePhone').value,
+            device: document.getElementById('serviceDevice').value,
+            serviceType: document.getElementById('serviceType').value,
+            issue: document.getElementById('serviceIssue').value,
+            price: price,
+            deposit: deposit,
+            estimatedDate: document.getElementById('serviceDate').value,
+            status: document.getElementById('serviceStatus').value
+        };
+
+        services.push(service);
+        storage.set('services', JSON.stringify(services));
+        showToast(`Servis berhasil ditambahkan! No. Nota: ${service.id}`, 'success', 4000);
+        document.getElementById('serviceForm').reset();
+        renderServiceList();
+        updateHeaderStats();
+    }
+
+    // Helper: tampilkan visual error pada field
+    function setFieldError(fieldId, hasError) {
+        const el = document.getElementById(fieldId);
+        if (!el) return;
+        if (hasError) {
+            el.classList.add('input-error');
+        } else {
+            el.classList.remove('input-error');
+        }
+    }
+
+    function updateServicePrice() {
+        const serviceType = document.getElementById('serviceType').value;
+        const priceInput  = document.getElementById('servicePrice');
+        const prices = {
+            'Ganti LCD': 500000,
+            'Ganti Baterai': 200000,
+            'Perbaikan Software': 100000,
+            'Flashing': 150000,
+            'Service Charging': 150000,
+            'Ganti Kamera': 300000,
+            'Service Speaker': 200000
+        };
+        if (prices[serviceType]) {
+            // Set dengan format titik
+            priceInput.value = prices[serviceType].toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        }
+    }
+
+    function renderServiceList() {
+        const serviceList = document.getElementById('serviceListItems');
+        const activeServices = services.filter(s => s.status !== 'Diambil');
+
+        if (activeServices.length === 0) {
+            serviceList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔧</div>
+                    <div class="empty-state-text">Belum ada servis aktif</div>
+                    <div class="empty-state-sub">Isi form di atas untuk menambah servis baru</div>
+                </div>`;
+            return;
+        }
+
+        serviceList.innerHTML = activeServices.map(service => `
+            <div class="service-card">
+                <div class="service-header">
+                    <div class="service-nota">${service.id}</div>
+                    <div class="service-status ${service.status.replace(/ /g, '.')}">${service.status}</div>
+                </div>
+                <div class="service-info">
+                    <div class="service-info-item"><strong>Pelanggan:</strong> ${service.customerName}</div>
+                    <div class="service-info-item"><strong>HP:</strong> ${service.customerPhone}</div>
+                    <div class="service-info-item"><strong>Device:</strong> ${service.device}</div>
+                    <div class="service-info-item"><strong>Jenis:</strong> ${service.serviceType}</div>
+                    <div class="service-info-item"><strong>Biaya:</strong> ${formatCurrency(service.price)}</div>
+                    <div class="service-info-item"><strong>DP:</strong> ${formatCurrency(service.deposit)}</div>
+                    <div class="service-info-item"><strong>Sisa:</strong> ${formatCurrency(service.price - service.deposit)}</div>
+                    <div class="service-info-item"><strong>Est. Selesai:</strong> ${service.estimatedDate || '-'}</div>
+                </div>
+                ${service.issue ? `<p style="font-size:14px;color:#64748b;margin-bottom:12px;"><strong>Keluhan:</strong> ${service.issue}</p>` : ''}
+                <div class="service-actions">
+                    <button class="btn-update" onclick="updateServiceStatus('${service.id}')">Update Status</button>
+                    <button class="btn-print-nota" onclick="printServiceNota('${service.id}')">🖨️ Nota</button>
+                    <button class="btn-complete" onclick="completeService('${service.id}')">✅ Selesai</button>
+                    ${AUTH.isAdmin() ? `<button class="btn-delete" onclick="deleteService('${service.id}')">🗑️ Hapus</button>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function filterServices() {
+        const searchTerm = document.getElementById('searchService').value.toLowerCase();
+        document.querySelectorAll('.service-card').forEach(card => {
+            card.style.display = card.textContent.toLowerCase().includes(searchTerm) ? '' : 'none';
+        });
+    }
+
+    function updateServiceStatus(serviceId) {
+        const service = services.find(s => s.id === serviceId);
+        if (!service) return;
+
+        // Tampilkan modal update status
+        const statusModal = document.getElementById('statusModal');
+        if (statusModal) {
+            document.getElementById('statusCurrent').textContent = service.status;
+            statusModal.style.display = 'block';
+            document.getElementById('btnStatusConfirm').onclick = function() {
+                const selected = document.querySelector('input[name="statusRadio"]:checked');
+                if (selected) {
+                    service.status = selected.value;
+                    storage.set('services', JSON.stringify(services));
+                    renderServiceList();
+                    showToast(`Status diperbarui: ${service.status}`, 'success');
+                }
+                statusModal.style.display = 'none';
+            };
+            document.getElementById('btnStatusCancel').onclick = function() {
+                statusModal.style.display = 'none';
+            };
+            // Set radio ke status saat ini
+            const radios = document.querySelectorAll('input[name="statusRadio"]');
+            radios.forEach(r => { r.checked = r.value === service.status; });
+        }
+    }
+
+    function closeStatusModal() {
+        const m = document.getElementById('statusModal');
+        if (m) m.style.display = 'none';
+    }
+
+    function completeService(serviceId) {
+        const service = services.find(s => s.id === serviceId);
+        if (!service) return;
+        const remaining = service.price - service.deposit;
+        const msg = remaining > 0
+            ? `Sisa pembayaran: ${formatCurrency(remaining)}\n\nTandai sebagai lunas dan selesai?`
+            : 'Tandai servis ini sebagai selesai dan sudah diambil?';
+
+        showConfirm(msg, function() {
+            service.status = 'Diambil';
+            service.completedDate = new Date().toISOString();
+            const transaction = {
+                id: service.id,
+                type: 'servis',
+                date: service.completedDate,
+                customerName: service.customerName,
+                customerPhone: service.customerPhone,
+                device: service.device,
+                serviceType: service.serviceType,
+                total: service.price,
+                deposit: service.deposit,
+                paid: service.price
+            };
+            transactions.push(transaction);
+            storage.set('services', JSON.stringify(services));
+            storage.set('transactions', JSON.stringify(transactions));
+            showToast('Servis selesai! Transaksi disimpan.', 'success');
+            renderServiceList();
+            updateHeaderStats();
+        });
+    }
+
+    function deleteService(serviceId) {
+        showConfirm('Hapus data servis ini? Tindakan ini tidak dapat dibatalkan.', function() {
+            services = services.filter(s => s.id !== serviceId);
+            storage.set('services', JSON.stringify(services));
+            renderServiceList();
+            showToast('Data servis berhasil dihapus', 'info');
+        });
+    }
+
+    // ===== NOTA SERVIS =====
+    function printServiceNota(serviceId) {
+        const service = services.find(s => s.id === serviceId);
+        if (!service) return;
+
+        const remaining = service.price - service.deposit;
+        document.getElementById('serviceReceiptContent').innerHTML = `
+            <div class="receipt-header">
+                <h2>COUNTER HP</h2>
+                <p>Jl. Contoh No. 123 · Telp: 0812-3456-7890</p>
+                <p style="margin-top:8px;">================================</p>
+            </div>
+            <p style="text-align:center;font-weight:700;font-size:15px;margin:8px 0;">NOTA SERVIS</p>
+            <p>================================</p>
+            <p><strong>No. Nota:</strong> ${service.id}</p>
+            <p><strong>Tanggal Masuk:</strong> ${formatDate(service.date)}</p>
+            <p><strong>Est. Selesai:</strong> ${service.estimatedDate ? formatDate(service.estimatedDate + 'T00:00:00') : '-'}</p>
+            <p>================================</p>
+            <p><strong>Pelanggan:</strong> ${service.customerName}</p>
+            <p><strong>No. HP:</strong> ${service.customerPhone}</p>
+            <p><strong>Diterima oleh:</strong> ${AUTH.getName()}</p>
+            <p>================================</p>
+            <p><strong>Device:</strong> ${service.device}</p>
+            <p><strong>Jenis Servis:</strong> ${service.serviceType}</p>
+            ${service.issue ? `<p><strong>Keluhan:</strong> ${service.issue}</p>` : ''}
+            <p>================================</p>
+            <div class="receipt-footer">
+                <div class="receipt-item">
+                    <span>Estimasi Biaya:</span>
+                    <span>${formatCurrency(service.price)}</span>
+                </div>
+                <div class="receipt-item">
+                    <span>DP Diterima:</span>
+                    <span>${formatCurrency(service.deposit)}</span>
+                </div>
+                <div class="receipt-item" style="font-weight:700;font-size:1.1em;">
+                    <span>Sisa Tagihan:</span>
+                    <span>${formatCurrency(remaining >= 0 ? remaining : 0)}</span>
+                </div>
+                <div class="receipt-item">
+                    <span>Status:</span>
+                    <span><strong>${service.status}</strong></span>
+                </div>
+            </div>
+            <p>================================</p>
+            <p style="text-align:center;margin-top:10px;">Terima Kasih atas kepercayaan Anda</p>
+            <p style="text-align:center;font-size:12px;">Simpan nota ini sebagai bukti penerimaan servis</p>
+        `;
+        document.getElementById('serviceReceiptModal').style.display = 'block';
+    }
+
+    function closeServiceReceiptModal() {
+        document.getElementById('serviceReceiptModal').style.display = 'none';
+    }
+
+    function printServiceReceipt() {
+        window.print();
+    }
+
+    // ===== PRODUCT MANAGEMENT =====
+    function renderProdukTable(filter = 'all', search = '') {
+        const tbody = document.getElementById('produkTableBody');
+        if (!tbody) return;
+
+        let list = filter === 'all' ? products : products.filter(p => p.category === filter);
+        if (search) list = list.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+        if (list.length === 0) {
+            tbody.innerHTML = `
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">
+                    Tidak ada produk ditemukan
+                </td></tr>`;
+            return;
+        }
+
+        const categoryLabel = { smartphone: '📱 Smartphone', aksesoris: '🔌 Aksesoris', pulsa: '📶 Pulsa/Data' };
+
+        tbody.innerHTML = list.map(p => {
+            const imgCell = p.image
+                ? `<img src="${p.image}" alt="${p.name}" class="produk-table-img">`
+                : `<div class="produk-table-icon">${p.icon}</div>`;
+            const stockClass = p.stock === 0 ? 'stock-empty' : p.stock <= 3 ? 'stock-low' : '';
+            const stockLabel = p.stock === 0 ? '❌ Habis' : p.stock >= 999 ? '∞ Tidak Terbatas' : p.stock;
+            return `
+                <tr id="produk-row-${p.id}">
+                    <td>${imgCell}</td>
+                    <td class="produk-name-cell">${p.name}</td>
+                    <td><span class="category-pill">${categoryLabel[p.category] || p.category}</span></td>
+                    <td class="produk-price-cell">${formatCurrency(p.price)}</td>
+                    <td><span class="product-stock ${stockClass}">${stockLabel}</span></td>
+                    <td class="produk-action-cell">
+                        <button class="btn-produk-edit"   onclick="openProductModal(${p.id})">✏️ Edit</button>
+                        <button class="btn-produk-delete" onclick="deleteProduct(${p.id})">🗑️</button>
+                    </td>
+                </tr>`;
+        }).join('');
+    }
+
+    function filterProdukManage() {
+        const search = document.getElementById('searchProdukManage').value;
+        const activeBtn = document.querySelector('.produk-filter-btns .category-btn.active');
+        const filter = activeBtn ? activeBtn.dataset.cat || 'all' : 'all';
+        renderProdukTable(filter, search);
+    }
+
+    function filterProdukCategory(btn, cat) {
+        document.querySelectorAll('.produk-filter-btns .category-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        btn.dataset.cat = cat;
+        const search = document.getElementById('searchProdukManage').value;
+        renderProdukTable(cat, search);
+    }
+
+    function openProductModal(productId = null) {
+        if (!AUTH.isAdmin()) {
+            showToast('Hanya Admin yang dapat mengedit produk', 'warning');
+            return;
+        }
+        const modal = document.getElementById('productModal');
+        const title = document.getElementById('productModalTitle');
+
+        // Reset form
+        document.getElementById('editProductId').value    = '';
+        document.getElementById('productName').value      = '';
+        document.getElementById('productCategory').value  = 'smartphone';
+        document.getElementById('productIcon').value      = '📱';
+        document.getElementById('productPrice').value     = '';
+        document.getElementById('productStock').value     = '';
+        document.getElementById('productDesc').value      = '';
+        document.getElementById('productImgPreview').innerHTML = '<div class="photo-placeholder">🖼️<span>Belum ada foto</span></div>';
+        delete modal.dataset.pendingImage;
+        document.getElementById('productImgInput').value  = '';
+
+        if (productId) {
+            const p = products.find(pr => pr.id === productId);
+            if (!p) return;
+            title.textContent = '✏️ Edit Produk';
+            document.getElementById('editProductId').value   = p.id;
+            document.getElementById('productName').value     = p.name;
+            document.getElementById('productCategory').value = p.category;
+            document.getElementById('productIcon').value     = p.icon;
+            document.getElementById('productPrice').value    = p.price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            document.getElementById('productStock').value    = p.stock;
+            document.getElementById('productDesc').value     = p.desc || '';
+            if (p.image) {
+                document.getElementById('productImgPreview').innerHTML =
+                    `<img src="${p.image}" class="photo-preview-img" alt="Foto produk">`;
+                modal.dataset.currentImage = p.image;
+            }
+        } else {
+            title.textContent = '➕ Tambah Produk Baru';
+        }
+
+        modal.style.display = 'block';
+    }
+
+    function handleProductImgSelect(input) {
+        const file = input.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showToast('File harus berupa gambar!', 'error'); return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            showToast('Ukuran foto maksimal 2MB!', 'warning'); return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('productImgPreview').innerHTML =
+                `<img src="${e.target.result}" class="photo-preview-img" alt="Preview">`;
+            document.getElementById('productModal').dataset.pendingImage = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function removeProductModalImg() {
+        document.getElementById('productImgPreview').innerHTML =
+            '<div class="photo-placeholder">🖼️<span>Belum ada foto</span></div>';
+        document.getElementById('productImgInput').value = '';
+        delete document.getElementById('productModal').dataset.pendingImage;
+        delete document.getElementById('productModal').dataset.currentImage;
+    }
+
+    function closeProductModal() {
+        document.getElementById('productModal').style.display = 'none';
+    }
+
+    function saveProduct() {
+        const name     = document.getElementById('productName').value.trim();
+        const category = document.getElementById('productCategory').value;
+        const icon     = document.getElementById('productIcon').value.trim() || '📦';
+        const price    = parseRupiahInput('productPrice');
+        const stock    = parseInt(document.getElementById('productStock').value)   || 0;
+        const desc     = document.getElementById('productDesc').value.trim();
+        const editId   = document.getElementById('editProductId').value;
+        const modal    = document.getElementById('productModal');
+        const newImage = modal.dataset.pendingImage || null;
+
+        if (!name)       { showToast('Nama produk tidak boleh kosong!', 'error'); return; }
+        if (price <= 0)  { showToast('Harga harus lebih dari 0!', 'error'); return; }
+        if (stock < 0)   { showToast('Stok tidak boleh negatif!', 'error'); return; }
+
+        if (editId) {
+            const p = products.find(pr => pr.id === parseInt(editId));
+            if (p) {
+                p.name     = name;
+                p.category = category;
+                p.icon     = icon;
+                p.price    = price;
+                p.stock    = stock;
+                p.desc     = desc;
+                if (newImage) p.image = newImage;
+                else if (!modal.dataset.currentImage) p.image = null;
+                showToast(`${name} berhasil diperbarui!`, 'success');
+            }
+        } else {
+            const newId = Math.max(...products.map(p => p.id), 19) + 1;
+            products.push({ id: newId, name, category, price, stock, icon, image: newImage, desc });
+            showToast(`${name} berhasil ditambahkan!`, 'success');
+        }
+
+        saveProductImages();
+        closeProductModal();
+        renderProdukTable();
+        renderProducts(getCurrentFilter());
+        updateDashboard();
+        updateBusinessAlerts();
+    }
+
+    function deleteProduct(productId) {
+        const p = products.find(pr => pr.id === productId);
+        if (!p) return;
+        showConfirm(`Hapus produk "${p.name}"? Tindakan ini tidak dapat dibatalkan.`, function() {
+            products = products.filter(pr => pr.id !== productId);
+            saveProductImages();
+            renderProdukTable();
+            renderProducts(getCurrentFilter());
+            updateDashboard();
+            showToast(`${p.name} berhasil dihapus`, 'info');
+        });
+    }
+
+    // ===== HISTORY =====
+    function buildHistoryHTML(list) {
+        if (list.length === 0) {
+            return `<div class="empty-state">
+                <div class="empty-state-icon">🔍</div>
+                <div class="empty-state-text">Tidak ada hasil ditemukan</div>
+                <div class="empty-state-sub">Coba ubah filter atau kata kunci pencarian</div>
+            </div>`;
+        }
+        const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
+        return sorted.map(trans => {
+            const isPenjualan = trans.type === 'penjualan';
+            const itemCount   = isPenjualan ? (trans.items || []).length : 0;
+            const badgeClass  = isPenjualan ? 'type-penjualan' : 'type-servis';
+            const badgeLabel  = isPenjualan ? '🛒 Penjualan' : '🔧 Servis';
+
+            // Summary line bawah header
+            const summaryLine = isPenjualan
+                ? `${itemCount} produk · ${trans.paymentMethod || 'Tunai'}`
+                : `${trans.device || '-'} · ${trans.serviceType || '-'}`;
+
+            return `
+            <div class="history-item" id="hist-${trans.id}">
+                <!-- Header row -->
+                <div class="history-header">
+                    <div class="history-header-left">
+                        <span class="history-type ${badgeClass}">${badgeLabel}</span>
+                        <span class="history-id">${trans.id}</span>
+                    </div>
+                    <div class="history-header-right">
+                        <span class="history-date">${formatDateTime(trans.date)}</span>
+                        <button class="btn-detail-toggle" onclick="toggleHistoryDetail('${trans.id}')"
+                                id="btn-toggle-${trans.id}">
+                            Detail ▾
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary row (always visible) -->
+                <div class="history-summary-row">
+                    <span class="history-customer">👤 ${trans.customerName}
+                        ${trans.customerPhone && trans.customerPhone !== '-'
+                            ? `<span class="history-phone">· 📞 ${trans.customerPhone}</span>`
+                            : ''}
+                    </span>
+                    <span class="history-summary-meta">${summaryLine}</span>
+                    <span class="history-total-inline">${formatCurrency(trans.total)}</span>
+                </div>
+
+                <!-- Detail panel (collapse) -->
+                <div class="history-detail-panel" id="detail-${trans.id}" style="display:none;">
+                    ${isPenjualan ? buildPenjualanDetail(trans) : buildServisDetail(trans)}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function buildPenjualanDetail(trans) {
+        const items = trans.items || [];
+        const discountAmount = trans.subtotal - trans.total;
+        return `
+            <div class="detail-section">
+                <div class="detail-section-title">🛍️ Daftar Produk</div>
+                <div class="detail-items-table">
+                    <div class="detail-table-head">
+                        <span>Produk</span><span>Qty</span><span>Harga</span><span>Subtotal</span>
+                    </div>
+                    ${items.map(item => `
+                        <div class="detail-table-row">
+                            <span>${item.icon || '📦'} ${item.name}</span>
+                            <span class="detail-qty">${item.quantity}×</span>
+                            <span>${formatCurrency(item.price)}</span>
+                            <span class="detail-subtotal">${formatCurrency(item.price * item.quantity)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-section-title">💳 Ringkasan Pembayaran</div>
+                <div class="detail-payment-grid">
+                    <div class="detail-payment-row">
+                        <span>Subtotal</span>
+                        <span>${formatCurrency(trans.subtotal)}</span>
+                    </div>
+                    ${trans.discount > 0 ? `
+                    <div class="detail-payment-row">
+                        <span>Diskon (${trans.discount}%)</span>
+                        <span class="detail-discount">− ${formatCurrency(discountAmount)}</span>
+                    </div>` : ''}
+                    <div class="detail-payment-row detail-payment-total">
+                        <span>Total Bayar</span>
+                        <span>${formatCurrency(trans.total)}</span>
+                    </div>
+                    <div class="detail-payment-row">
+                        <span>Metode</span>
+                        <span><strong>${trans.paymentMethod || '-'}</strong></span>
+                    </div>
+                    ${trans.received ? `
+                    <div class="detail-payment-row">
+                        <span>Uang Diterima</span>
+                        <span>${formatCurrency(trans.received)}</span>
+                    </div>
+                    <div class="detail-payment-row">
+                        <span>Kembalian</span>
+                        <span class="detail-change">${formatCurrency(trans.change || 0)}</span>
+                    </div>` : ''}
+                </div>
+            </div>`;
+    }
+
+    function buildServisDetail(trans) {
+        const remaining = (trans.total || 0) - (trans.deposit || 0);
+        return `
+            <div class="detail-section">
+                <div class="detail-section-title">🔧 Detail Servis</div>
+                <div class="detail-info-grid">
+                    <div class="detail-info-item"><span>Device</span><strong>${trans.device || '-'}</strong></div>
+                    <div class="detail-info-item"><span>Jenis Servis</span><strong>${trans.serviceType || '-'}</strong></div>
+                    <div class="detail-info-item"><span>No. Nota</span><strong>${trans.id}</strong></div>
+                    <div class="detail-info-item"><span>Tanggal Selesai</span><strong>${formatDate(trans.date)}</strong></div>
+                </div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-section-title">💳 Ringkasan Pembayaran</div>
+                <div class="detail-payment-grid">
+                    <div class="detail-payment-row">
+                        <span>Biaya Servis</span>
+                        <span>${formatCurrency(trans.total || 0)}</span>
+                    </div>
+                    <div class="detail-payment-row">
+                        <span>DP Diterima</span>
+                        <span>${formatCurrency(trans.deposit || 0)}</span>
+                    </div>
+                    <div class="detail-payment-row detail-payment-total">
+                        <span>Sisa / Total Lunas</span>
+                        <span>${formatCurrency(remaining >= 0 ? remaining : 0)}</span>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    function toggleHistoryDetail(transId) {
+        const panel = document.getElementById(`detail-${transId}`);
+        const btn   = document.getElementById(`btn-toggle-${transId}`);
+        if (!panel) return;
+        const isOpen = panel.style.display !== 'none';
+        panel.style.display = isOpen ? 'none' : 'block';
+        btn.textContent = isOpen ? 'Detail ▾' : 'Tutup ▴';
+        btn.classList.toggle('active', !isOpen);
+    }
+
+    function renderHistory() {
+        const historyList = document.getElementById('historyList');
+        if (transactions.length === 0) {
+            historyList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <div class="empty-state-text">Belum ada riwayat transaksi</div>
+                    <div class="empty-state-sub">Transaksi penjualan dan servis akan muncul di sini</div>
+                </div>`;
+            return;
+        }
+        historyList.innerHTML = buildHistoryHTML(transactions);
+    }
+
+    function filterHistory() {
+        const dateFrom = document.getElementById('filterDateFrom').value;
+        const dateTo   = document.getElementById('filterDateTo').value;
+        const type     = document.getElementById('filterType').value;
+        const search   = document.getElementById('searchHistory').value.toLowerCase();
+
+        const filtered = transactions.filter(trans => {
+            const transDate = new Date(trans.date).toISOString().split('T')[0];
+            if (dateFrom && transDate < dateFrom) return false;
+            if (dateTo   && transDate > dateTo)   return false;
+            if (type !== 'all' && trans.type !== type) return false;
+            if (search && !JSON.stringify(trans).toLowerCase().includes(search)) return false;
+            return true;
+        });
+
+        document.getElementById('historyList').innerHTML = buildHistoryHTML(filtered);
+    }
+
+    // ===== REPORTS dengan MINI CHART =====
+    function generateReport(period) {
+        // Update active button state
+        document.querySelectorAll('.report-period .btn-secondary').forEach(b => b.classList.remove('active'));
+        event && event.target && event.target.classList.add('active');
+
+        const now = new Date();
+        let startDate;
+        switch(period) {
+            case 'today': startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()); break;
+            case 'week':  startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+            case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+            case 'year':  startDate = new Date(now.getFullYear(), 0, 1); break;
+        }
+
+        const filtered    = transactions.filter(t => new Date(t.date) >= startDate);
+        const salesTrans  = filtered.filter(t => t.type === 'penjualan');
+        const serviceTrans= filtered.filter(t => t.type === 'servis');
+        const totalSales  = salesTrans.reduce((sum, t) => sum + t.total, 0);
+        const totalService= serviceTrans.reduce((sum, t) => sum + t.total, 0);
+
+        document.getElementById('reportSales').textContent         = formatCurrency(totalSales);
+        document.getElementById('reportService').textContent       = formatCurrency(totalService);
+        document.getElementById('reportCount').textContent         = filtered.length;
+        document.getElementById('reportActiveService').textContent = services.filter(s => s.status !== 'Diambil').length;
+
+        // Produk terlaris
+        const productCount = {};
+        salesTrans.forEach(t => t.items.forEach(item => {
+            productCount[item.name] = (productCount[item.name] || 0) + item.quantity;
+        }));
+        const topProducts = Object.entries(productCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const maxProd = topProducts.length > 0 ? topProducts[0][1] : 1;
+
+        document.getElementById('topProducts').innerHTML = topProducts.length > 0
+            ? topProducts.map(([name, count]) => `
+                <div class="chart-item">
+                    <div class="chart-item-label">
+                        <span class="chart-item-name">${name}</span>
+                        <span class="chart-item-value">${count} terjual</span>
+                    </div>
+                    <div class="chart-bar-track">
+                        <div class="chart-bar" style="width: ${Math.round((count / maxProd) * 100)}%"></div>
+                    </div>
+                </div>`).join('')
+            : '<div class="empty-state-text" style="padding:20px;text-align:center;">Belum ada data penjualan</div>';
+
+        // Servis terbanyak
+        const serviceCount = {};
+        serviceTrans.forEach(t => {
+            serviceCount[t.serviceType] = (serviceCount[t.serviceType] || 0) + 1;
+        });
+        const topServices = Object.entries(serviceCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const maxSrv = topServices.length > 0 ? topServices[0][1] : 1;
+
+        document.getElementById('topServices').innerHTML = topServices.length > 0
+            ? topServices.map(([name, count]) => `
+                <div class="chart-item">
+                    <div class="chart-item-label">
+                        <span class="chart-item-name">${name}</span>
+                        <span class="chart-item-value">${count} servis</span>
+                    </div>
+                    <div class="chart-bar-track">
+                        <div class="chart-bar chart-bar-service" style="width: ${Math.round((count / maxSrv) * 100)}%"></div>
+                    </div>
+                </div>`).join('')
+            : '<div class="empty-state-text" style="padding:20px;text-align:center;">Belum ada data servis</div>';
+    }
+
+    // ===== HEADER STATS =====
+    function updateHeaderStats() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayTrans = transactions.filter(t => new Date(t.date) >= today);
+        const todaySales = todayTrans.reduce((sum, t) => sum + t.total, 0);
+        const activeServicesCount = services.filter(s => s.status !== 'Diambil').length;
+
+        document.getElementById('todaySales').textContent       = formatCurrency(todaySales);
+        document.getElementById('totalTransactions').textContent = transactions.length;
+        document.getElementById('activeServices').textContent   = activeServicesCount;
+    }
+
+    // ===== FORMAT HELPERS =====
+    function formatCurrency(amount) {
+        return 'Rp ' + Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    // Format input rupiah saat mengetik — tampilkan titik setiap 3 digit
+    function formatRupiahInput(input) {
+        const pos = input.selectionStart;
+        const rawBefore = input.value.replace(/\./g, '');
+        // Ambil hanya angka
+        const digits = input.value.replace(/[^0-9]/g, '');
+        // Format dengan titik
+        const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        input.value = formatted;
+        // Pertahankan posisi kursor (kompensasi penambahan titik)
+        try {
+            const diff = formatted.length - rawBefore.length;
+            input.setSelectionRange(pos + diff, pos + diff);
+        } catch(e) {}
+    }
+
+    // Ambil nilai numerik bersih dari input rupiah
+    function parseRupiahInput(id) {
+        const el = document.getElementById(id);
+        if (!el) return 0;
+        return parseFloat(el.value.replace(/\./g, '')) || 0;
+    }
+
+    function formatDate(dateString) {
+        return new Date(dateString).toLocaleDateString('id-ID', {
+            year: 'numeric', month: 'long', day: 'numeric'
+        });
+    }
+
+    function formatDateTime(dateString) {
+        return new Date(dateString).toLocaleDateString('id-ID', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+    }
+
+    // ===== CLOSE MODALS ON OUTSIDE CLICK =====
+    window.onclick = function(event) {
+        const paymentModal        = document.getElementById('paymentModal');
+        const receiptModal        = document.getElementById('receiptModal');
+        const statusModal         = document.getElementById('statusModal');
+        const photoModal          = document.getElementById('photoModal');
+        const productModal        = document.getElementById('productModal');
+        const serviceReceiptModal = document.getElementById('serviceReceiptModal');
+        const settingsModal       = document.getElementById('settingsModal');
+        const specModal           = document.getElementById('specModal');
+        if (event.target === paymentModal)        closePaymentModal();
+        if (event.target === receiptModal)        closeReceiptModal();
+        if (event.target === statusModal)         closeStatusModal();
+        if (event.target === photoModal)          closePhotoModal();
+        if (event.target === productModal)        closeProductModal();
+        if (event.target === serviceReceiptModal) closeServiceReceiptModal();
+        if (event.target === settingsModal)       closeSettings();
+        if (event.target === specModal)           closeSpecModal();
+    };
+    </script>

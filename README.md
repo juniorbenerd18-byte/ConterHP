@@ -17,8 +17,7 @@ Aplikasi web manajemen counter HP dan layanan servis yang dirancang untuk pemili
 ## 📸 Screenshot / Video Demo
 
 > *Tampilan antarmuka aplikasi NexusCenter Counter HP:*
-
-![Demo Application] ![alt text](image-4.png) ![alt text](image-5.png) ![alt text](image-6.png)
+![alt text](Assets/Penjualan.png) ![alt text](Assets/Product.png) ![alt text](Assets/Servis.png)
 
 ---
 
@@ -60,14 +59,14 @@ Ikuti langkah-langkah berikut untuk menjalankan project ini di lingkungan lokal 
 ## 🌐 Link Demo Live
 
 Aplikasi ini telah di-deploy sebagai Google Apps Script Web App dan dapat diakses secara live pada link berikut:
-- **Live Demo Web App:** [NexusCenter Live Demo] https://script.google.com/macros/s/AKfycbxDV5j_zHXUFHY1BYCS1KXbaRrmEIiWaCtG1Ze62VE/dev
+- **Live Demo Web App:** [NexusCenter Live Demo](https://script.google.com/macros/s/AKfycbxDV5j_zHXUFHY1BYCS1KXbaRrmEIiWaCtG1Ze62VE/dev)
 
 ---
 
 ## 💼 Link Edusoft Portfolio
 
 Bukti resmi pengerjaan dan dokumentasi proyek ini terhubung dengan platform Edusoft Portfolio:
-- **Edusoft Portfolio:** [Halaman Proyek Edusoft Portfolio] https://portfolio.edusoftcenter.com/contributors/junior-alfredo-benerd-setiawan
+- **Edusoft Portfolio:** https://portfolio.edusoftcenter.com/contributors/junior-alfredo-benerd-setiawan
 ---
 
 ## 🎯 Fitur Utama

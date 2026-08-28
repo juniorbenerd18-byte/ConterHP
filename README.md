@@ -67,7 +67,7 @@ Aplikasi ini telah di-deploy sebagai Google Apps Script Web App dan dapat diakse
 ## 💼 Link Edusoft Portfolio
 
 Bukti resmi pengerjaan dan dokumentasi proyek ini terhubung dengan platform Edusoft Portfolio:
-- **Edusoft Portfolio:** [Halaman Proyek Edusoft Portfolio] https://portfolio.edusoftcenter.com/contributors/junior-alfredo-benerd-setiawan
+- **Edusoft Portfolio:** https://portfolio.edusoftcenter.com/contributors/junior-alfredo-benerd-setiawan
 ---
 
 ## 🎯 Fitur Utama

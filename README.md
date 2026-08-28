@@ -1,216 +1,78 @@
-# 📱 Aplikasi Counter HP
+# 📱 NexusCenter - Aplikasi Counter HP & Service Management
 
-Aplikasi web untuk manajemen counter HP yang mencakup penjualan produk dan layanan servis.
-
-## 🎯 Fitur Utama
-
-### 1. **Penjualan** 🛒
-- Katalog produk dengan kategori:
-  - Smartphone
-  - Aksesoris (Charger, Kabel, Headset, Tempered Glass, Casing, Power Bank, dll)
-  - Pulsa & Paket Data
-- Keranjang belanja dengan kontrol quantity
-- Sistem diskon
-- Multiple metode pembayaran (Tunai, Transfer, QRIS, Debit)
-- Perhitungan kembalian otomatis
-- Cetak nota/struk
-- Manajemen stok otomatis
-- Data pelanggan (opsional)
-
-### 2. **Servis** 🔧
-- Form penerimaan servis dengan detail lengkap:
-  - Ganti LCD
-  - Ganti Baterai
-  - Perbaikan Software
-  - Flashing
-  - Service Charging
-  - Dan servis lainnya
-- Tracking status servis:
-  - Diterima
-  - Dalam Proses
-  - Menunggu Sparepart
-  - Selesai
-  - Diambil
-- Sistem DP/Uang Muka
-- Estimasi biaya dan waktu selesai
-- Nomor nota unik untuk setiap servis
-- Pencarian servis berdasarkan nama/HP/nota
-
-### 3. **Riwayat Transaksi** 📋
-- Daftar lengkap semua transaksi
-- Filter berdasarkan:
-  - Tanggal (dari - sampai)
-  - Tipe transaksi (penjualan/servis)
-  - Pencarian keyword
-- Detail transaksi lengkap
-
-### 4. **Laporan & Statistik** 📊
-- Laporan periode: Hari Ini, Minggu Ini, Bulan Ini, Tahun Ini
-- Statistik:
-  - Total penjualan
-  - Pendapatan servis
-  - Jumlah transaksi
-  - Servis aktif
-- Produk terlaris
-- Jenis servis terbanyak
-
-## 🚀 Cara Menggunakan
-
-### Instalasi
-1. Download semua file (index.html, style.css, app.js)
-2. Letakkan di satu folder
-3. Buka file `index.html` di browser
-
-**Tidak perlu instalasi server atau database!** Aplikasi ini menggunakan Local Storage browser untuk menyimpan data.
-
-### Panduan Penggunaan
-
-#### **Melakukan Penjualan:**
-1. Klik tab "🛒 Penjualan"
-2. Pilih kategori produk atau gunakan pencarian
-3. Klik produk untuk menambahkan ke keranjang
-4. Atur quantity dengan tombol +/-
-5. Tambahkan diskon jika diperlukan (%)
-6. Isi nama dan nomor HP pelanggan (opsional)
-7. Klik "💳 Proses Pembayaran"
-8. Pilih metode pembayaran
-9. Masukkan uang yang diterima
-10. Klik "✅ Konfirmasi Pembayaran"
-11. Cetak nota jika diperlukan
-
-#### **Menerima Servis:**
-1. Klik tab "🔧 Servis"
-2. Isi form penerimaan servis:
-   - Nama pelanggan (wajib)
-   - No. HP (wajib)
-   - Merk & Tipe HP (wajib)
-   - Pilih jenis servis
-   - Deskripsikan keluhan
-   - Estimasi biaya (akan muncul otomatis sesuai jenis servis)
-   - DP/Uang Muka
-   - Estimasi tanggal selesai
-   - Status awal
-3. Klik "💾 Simpan Servis"
-4. Catat nomor nota untuk pelanggan
-
-#### **Update Status Servis:**
-1. Pada daftar servis aktif, klik "Update Status"
-2. Pilih status baru (1-5)
-3. Atau klik "Selesai" untuk menyelesaikan servis dan menandai sebagai lunas
-
-#### **Melihat Riwayat:**
-1. Klik tab "📋 Riwayat"
-2. Gunakan filter tanggal dan tipe transaksi
-3. Gunakan pencarian untuk menemukan transaksi tertentu
-
-#### **Melihat Laporan:**
-1. Klik tab "📊 Laporan"
-2. Pilih periode laporan yang diinginkan
-3. Lihat statistik penjualan, servis, dan produk terlaris
-
-## 💾 Penyimpanan Data
-
-Aplikasi ini menggunakan **Local Storage** browser untuk menyimpan:
-- Data transaksi penjualan
-- Data servis
-- Riwayat semua transaksi
-
-**⚠️ Catatan Penting:**
-- Data tersimpan di browser lokal
-- Jika browser cache dihapus, data akan hilang
-- Untuk backup data, export data dari browser Developer Tools > Application > Local Storage
-- Sebaiknya gunakan browser yang sama untuk konsistensi data
-
-## 🎨 Tampilan Responsif
-
-Aplikasi ini responsive dan dapat digunakan di:
-- 💻 Desktop/Laptop
-- 📱 Tablet
-- 📱 Smartphone
-
-## 🔧 Kustomisasi
-
-### Mengubah Data Produk
-Edit file `app.js` pada bagian array `products`:
-
-```javascript
-let products = [
-    { 
-        id: 1, 
-        name: 'Nama Produk', 
-        category: 'smartphone', // atau 'aksesoris', 'pulsa'
-        price: 1000000, 
-        stock: 10, 
-        icon: '📱' 
-    },
-    // tambahkan produk lainnya...
-];
-```
-
-### Mengubah Info Counter di Nota
-Edit file `app.js` pada fungsi `showReceipt()`:
-
-```javascript
-<h2>COUNTER HP</h2>
-<p>Jl. Contoh No. 123</p>
-<p>Telp: 0812-3456-7890</p>
-```
-
-### Mengubah Estimasi Harga Servis
-Edit file `app.js` pada fungsi `updateServicePrice()`:
-
-```javascript
-const prices = {
-    'Ganti LCD': 500000,
-    'Ganti Baterai': 200000,
-    // ubah atau tambahkan harga servis...
-};
-```
-
-## 🌟 Keunggulan
-
-✅ **Mudah digunakan** - Interface yang intuitif dan user-friendly  
-✅ **Tanpa instalasi rumit** - Langsung buka di browser  
-✅ **Offline capable** - Tidak memerlukan koneksi internet  
-✅ **Gratis** - Tidak ada biaya berlangganan  
-✅ **Responsive** - Bisa digunakan di HP, tablet, atau komputer  
-✅ **Lengkap** - Mencakup penjualan dan servis dalam satu aplikasi  
-✅ **Auto calculation** - Perhitungan otomatis untuk semua transaksi  
-✅ **Print ready** - Siap untuk mencetak nota  
-
-## 📝 Catatan Tambahan
-
-- Aplikasi ini cocok untuk counter HP skala kecil hingga menengah
-- Untuk skala besar dengan multi-user, disarankan menggunakan sistem berbasis server
-- Data stok produk akan berkurang otomatis setelah penjualan
-- Nomor nota dibuat unik berdasarkan timestamp
-- Semua nominal menggunakan format Rupiah (Rp)
-
-## 🆘 Troubleshooting
-
-**Data hilang setelah reload?**
-- Pastikan tidak menggunakan mode Incognito/Private
-- Cek apakah browser mengizinkan Local Storage
-- Jangan clear browser cache/data
-
-**Nota tidak bisa dicetak?**
-- Pastikan printer terhubung
-- Gunakan fungsi print browser (Ctrl+P)
-- Cek print preview sebelum mencetak
-
-**Tampilan tidak responsive?**
-- Refresh halaman (F5)
-- Pastikan menggunakan browser modern (Chrome, Firefox, Edge terbaru)
-- Clear cache browser
-
-## 📄 Lisensi
-
-Aplikasi ini bersifat open source dan dapat dimodifikasi sesuai kebutuhan.
-
-## 👨‍💻 Pengembang
-
-Dibuat dengan ❤️ untuk memudahkan pengelolaan counter HP
+Aplikasi web manajemen counter HP dan layanan servis yang dirancang untuk pemilik toko, kasir, dan teknisi HP. Aplikasi ini memudahkan pengelolaan transaksi penjualan produk (smartphone, aksesoris, pulsa) serta pelacakan status perbaikan servis gadget secara real-time dan terorganisir.
 
 ---
 
-**Selamat menggunakan! Semoga aplikasi ini membantu meningkatkan efisiensi bisnis counter HP Anda.** 🚀
+## 🛠️ Tech Stack
+
+- **Frontend Core:** HTML5, Vanilla JavaScript (ES6+)
+- **Styling:** Vanilla CSS (Glassmorphism UI, Dark & Light Mode Support, Responsive Design)
+- **Backend / Platform:** Google Apps Script (GAS) & Node.js Clasp CLI
+- **Database & Storage:** Browser `LocalStorage` & Google Sheets API (`SpreadsheetApp`)
+- **Icons & Fonts:** FontAwesome 6, Google Fonts (Inter / Poppins)
+
+---
+
+## 📸 Screenshot / Video Demo
+
+> *Tampilan antarmuka aplikasi NexusCenter Counter HP:*
+
+![Demo Application] ![alt text](image-4.png) ![alt text](image-5.png) ![alt text](image-6.png)
+
+---
+
+## 🚀 Cara Install dan Menjalankan
+
+Ikuti langkah-langkah berikut untuk menjalankan project ini di lingkungan lokal Anda:
+
+### Prasyarat
+- Browser modern (Google Chrome, Mozilla Firefox, atau Microsoft Edge)
+- Git (opsional)
+- Node.js & npm (opsional, jika ingin menggunakan CLI `@google/clasp`)
+
+### Langkah-Langkah
+
+1. **Clone Repository**
+   ```bash
+   git clone https://github.com/juniorbenerd18-byte/ConterHP.git
+   cd ConterHP
+   ```
+
+2. **Menjalankan Secara Lokal**
+   - **Metode Direct Browser:** Buka file `counter-hp.html` atau `Index.html` secara langsung dengan mengklik dua kali file tersebut atau drag-and-drop ke browser.
+   - **Metode VS Code Live Server:** Buka folder project di VS Code, klik kanan pada file `Index.html`, lalu pilih **Open with Live Server**.
+
+3. **Deployment / Sync dengan Google Apps Script (via Clasp CLI)**
+   ```bash
+   # Install clasp secara global
+   npm install -g @google/clasp
+
+   # Login ke akun Google
+   clasp login
+
+   # Push perbaikan ke Google Apps Script
+   clasp push
+   ```
+
+---
+
+## 🌐 Link Demo Live
+
+Aplikasi ini telah di-deploy sebagai Google Apps Script Web App dan dapat diakses secara live pada link berikut:
+- **Live Demo Web App:** [NexusCenter Live Demo] https://script.google.com/macros/s/AKfycbxDV5j_zHXUFHY1BYCS1KXbaRrmEIiWaCtG1Ze62VE/dev
+
+---
+
+## 💼 Link Edusoft Portfolio
+
+Bukti resmi pengerjaan dan dokumentasi proyek ini terhubung dengan platform Edusoft Portfolio:
+- **Edusoft Portfolio:** [Halaman Proyek Edusoft Portfolio] https://portfolio.edusoftcenter.com/contributors/junior-alfredo-benerd-setiawan
+---
+
+## 🎯 Fitur Utama
+
+- 🛒 **Penjualan & Kasir (POS):** Katalog produk (HP, Aksesoris, Pulsa/Paket Data), keranjang belanja, diskon, opsi pembayaran beragam (Tunai, Transfer, QRIS, Debit), serta kalkulasi kembalian otomatis.
+- 🔧 **Manajemen & Tracking Servis:** Form penerimaan servis, estimasi biaya/DP, dan tracking status perbaikan (Diterima, Dalam Proses, Menunggu Sparepart, Selesai, Diambil).
+- 📋 **Riwayat & Cetak Nota:** Riwayat transaksi lengkap beserta opsi pencetakan nota/struk secara fisik atau simpan PDF.
+- 📊 **Laporan & Statistik:** Ringkasan pendapatan periode harian, mingguan, bulanan, dan analisis produk terlaris.
